@@ -1,26 +1,9 @@
-"""
-Customer Segmentation Dashboard
---------------------------------
-Loads customers.csv, segments customers into clusters using K-Means
-(scikit-learn), and presents an interactive Streamlit dashboard with
-KPIs, a segmentation scatter plot, a segment distribution bar chart,
-filters, and auto-generated business insights per segment.
-
-Run with: streamlit run app.py
-"""
-
-# ----------------------------------------------------------------------------
-# 1. IMPORTS
-# ----------------------------------------------------------------------------
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
-# ----------------------------------------------------------------------------
-# 2. PAGE CONFIGURATION
-# ----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Customer Segmentation Dashboard",
     page_icon="🧩",
@@ -34,10 +17,6 @@ st.markdown(
 )
 
 
-# ----------------------------------------------------------------------------
-# 3. LOAD DATA
-# ----------------------------------------------------------------------------
-# @st.cache_data avoids re-reading the CSV from disk on every interaction.
 @st.cache_data
 def load_data(path: str) -> pd.DataFrame:
     return pd.read_csv(path)
@@ -46,11 +25,6 @@ def load_data(path: str) -> pd.DataFrame:
 raw_df = load_data("customers.csv")
 
 
-# ----------------------------------------------------------------------------
-# 4. K-MEANS CLUSTERING
-# ----------------------------------------------------------------------------
-# Clustering is cached on the (data, k) combination, so it only re-runs when
-# the underlying data or the chosen number of clusters actually changes.
 @st.cache_data
 def run_kmeans(df: pd.DataFrame, n_clusters: int) -> pd.DataFrame:
     """Cluster customers on Annual Income & Spending Score and label
@@ -58,8 +32,6 @@ def run_kmeans(df: pd.DataFrame, n_clusters: int) -> pd.DataFrame:
 
     features = df[["Annual Income", "Spending Score"]].copy()
 
-    # Scale features so Income (large numbers) doesn't dominate the distance
-    # calculation over Spending Score (small numbers, 1-100 scale).
     scaler = StandardScaler()
     scaled_features = scaler.fit_transform(features)
 
@@ -69,10 +41,6 @@ def run_kmeans(df: pd.DataFrame, n_clusters: int) -> pd.DataFrame:
     result = df.copy()
     result["Cluster"] = cluster_ids
 
-    # ---- Build a business-friendly label for every cluster ----
-    # Compare each cluster's average Income/Spending against the overall
-    # median to classify it as High/Low on each axis, then map that
-    # combination to a descriptive segment name.
     income_median = df["Annual Income"].median()
     spending_median = df["Spending Score"].median()
 
@@ -90,8 +58,6 @@ def run_kmeans(df: pd.DataFrame, n_clusters: int) -> pd.DataFrame:
         spending_level = "High" if cluster_rows["Spending Score"].mean() >= spending_median else "Low"
         base_label = label_map[(income_level, spending_level)]
 
-        # If multiple clusters land on the same label (happens with k > 4),
-        # disambiguate them so each segment name stays unique in the UI.
         final_label = base_label
         suffix = 2
         while final_label in cluster_labels.values():
@@ -103,9 +69,7 @@ def run_kmeans(df: pd.DataFrame, n_clusters: int) -> pd.DataFrame:
     return result
 
 
-# ----------------------------------------------------------------------------
-# 5. SIDEBAR: CLUSTERING CONFIG + FILTERS
-# ----------------------------------------------------------------------------
+
 st.sidebar.header("⚙️ Segmentation Settings")
 
 n_clusters = st.sidebar.slider(
@@ -116,13 +80,12 @@ n_clusters = st.sidebar.slider(
     help="Number of customer segments for K-Means to create.",
 )
 
-# Run clustering on the full dataset BEFORE filtering, so segment
-# definitions stay stable regardless of which customers are filtered out.
+
 clustered_df = run_kmeans(raw_df, n_clusters)
 
 st.sidebar.header("🔎 Filters")
 
-# --- Age filter ---
+
 min_age, max_age = int(raw_df["Age"].min()), int(raw_df["Age"].max())
 selected_age_range = st.sidebar.slider(
     "Age Range",
@@ -131,7 +94,7 @@ selected_age_range = st.sidebar.slider(
     value=(min_age, max_age),
 )
 
-# --- Gender filter ---
+
 all_genders = sorted(raw_df["Gender"].unique())
 selected_genders = st.sidebar.multiselect(
     "Gender",
@@ -140,9 +103,7 @@ selected_genders = st.sidebar.multiselect(
 )
 
 
-# ----------------------------------------------------------------------------
-# 6. APPLY FILTERS
-# ----------------------------------------------------------------------------
+
 mask = (
     clustered_df["Age"].between(selected_age_range[0], selected_age_range[1])
     & clustered_df["Gender"].isin(selected_genders)
@@ -154,9 +115,7 @@ if filtered_df.empty:
     st.stop()
 
 
-# ----------------------------------------------------------------------------
-# 7. KPI CARDS
-# ----------------------------------------------------------------------------
+
 total_customers = len(filtered_df)
 avg_income = filtered_df["Annual Income"].mean()
 avg_spending = filtered_df["Spending Score"].mean()
@@ -171,12 +130,9 @@ kpi4.metric("🧩 Number of Segments", f"{num_segments}")
 st.markdown("---")
 
 
-# ----------------------------------------------------------------------------
-# 8. CHARTS
-# ----------------------------------------------------------------------------
 chart_col1, chart_col2 = st.columns(2)
 
-# --- Chart 1: Customer Segmentation Scatter Plot ---
+
 with chart_col1:
     st.subheader("📍 Customer Segmentation")
     fig_scatter = px.scatter(
@@ -191,7 +147,7 @@ with chart_col1:
     fig_scatter.update_layout(legend_title_text="Segment")
     st.plotly_chart(fig_scatter, use_container_width=True)
 
-# --- Chart 2: Segment Distribution Bar Chart ---
+
 with chart_col2:
     st.subheader("📊 Segment Distribution")
     segment_counts = filtered_df["Segment"].value_counts().reset_index()
@@ -211,9 +167,6 @@ with chart_col2:
 st.markdown("---")
 
 
-# ----------------------------------------------------------------------------
-# 9. CLUSTER LABELS & CUSTOMER COUNTS TABLE
-# ----------------------------------------------------------------------------
 st.subheader("📋 Segment Summary")
 
 segment_summary = (
@@ -243,15 +196,10 @@ segment_summary["Avg. Spending Score"] = segment_summary["Avg. Spending Score"].
 st.dataframe(segment_summary, use_container_width=True, hide_index=True)
 
 
-# ----------------------------------------------------------------------------
-# 10. BUSINESS INSIGHTS PER SEGMENT
-# ----------------------------------------------------------------------------
+
 st.subheader("💡 Business Insights by Segment")
 
-# Pre-written, business-friendly insight & recommendation text for each
-# possible segment label. Since labels are generated dynamically based on
-# each cluster's relative income/spending level, this covers every
-# combination that run_kmeans() can produce.
+
 insight_library = {
     "Premium Customers": (
         "High income and high spending. These are the most valuable "
@@ -279,11 +227,9 @@ insight_library = {
     ),
 }
 
-# Sort segments by average income (descending) for a consistent, readable
-# presentation order, matching the summary table above.
+
 for _, row in segment_summary.iterrows():
     segment_name = row["Segment"]
-    # Strip any "(2)", "(3)" disambiguation suffix to look up the base insight.
     base_name = segment_name.split(" (")[0]
     description, recommendation = insight_library.get(
         base_name,
@@ -300,9 +246,7 @@ for _, row in segment_summary.iterrows():
         )
 
 
-# ----------------------------------------------------------------------------
-# 11. RAW / CLUSTERED DATA (OPTIONAL VIEW)
-# ----------------------------------------------------------------------------
+
 with st.expander("🔍 View Filtered Customer Data with Segment Labels"):
     st.dataframe(
         filtered_df[["Customer ID", "Age", "Gender", "Annual Income", "Spending Score", "Segment"]],
